@@ -33,14 +33,22 @@ kubectl create secret generic projectid --from-literal=projectid=<YOUR PROJECT I
 
 ## Deploy operator
 
-Assuming kubectl is pointing to your management cluster, clone repo
+Assuming kubectl is pointing to your management cluster, 
 
-```
-git clone git@github.com:gianlucam76/gcs-storage-operator.git
+```bash
+kubectl apply -f https://raw.githubusercontent.com/gianlucam76/gcs-storage-operator/main/manifest/manifest.yaml
 ```
 
-then deploy it
+## Create a Bucket
 
+```yaml
+apiVersion: demo.projectsveltos.io/v1alpha1
+kind: Bucket
+metadata:
+  name: bucket-sample
+spec:
+  bucketName: <BUCKET NAME>
+  location: us-central1
 ```
-make deploy
-```
+
+This will create a bucket. Deleting above instance, will cause controller to delete bucket from google cloud storage.

@@ -52,6 +52,11 @@ const (
 func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("Bucket", req.NamespacedName)
 
+	// Set the GoogleAPIHTTPDebug environment variable to true
+	os.Setenv("GoogleAPIHTTPDebug", "true")
+
+	log.Info("reconciling")
+
 	// Fetch the Bucket instance
 	gcsBucket := &storagev1alpha1.Bucket{}
 	err := r.Get(ctx, req.NamespacedName, gcsBucket)
@@ -95,9 +100,17 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 
+	log.Info("creating bucket")
 	// Create the Google Cloud Storage bucket
-	if err := r.createBucket(gcsBucket); err != nil {
+	if err := r.createBucket(gcsBucket, log); err != nil {
 		log.Error(err, "failed to create")
+		return ctrl.Result{}, err
+	}
+
+	log.Info("granting bucket")
+	// Grant access to the Google Cloud Storage bucket
+	if err := r.grantBucketAccess(gcsBucket, log); err != nil {
+		log.Error(err, "failed to grant access")
 		return ctrl.Result{}, err
 	}
 
@@ -131,14 +144,70 @@ func (r *BucketReconciler) deleteBucket(gcsBucket *storagev1alpha1.Bucket) error
 	return nil
 }
 
-func (r *BucketReconciler) createBucket(gcsBucket *storagev1alpha1.Bucket) error {
+func (r *BucketReconciler) bucketExists(bucketName string, log logr.Logger) (bool, error) {
+	// Create a new Storage client
+	ctx := context.Background()
+
+	// Get the bucket handle
+	bucket := r.storageClient.Bucket(bucketName)
+
+	// Check if the bucket exists
+	_, err := bucket.Attrs(ctx)
+	if err == storage.ErrBucketNotExist {
+		log.Error(err, "failed to verify if bucket exists")
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (r *BucketReconciler) createBucket(gcsBucket *storagev1alpha1.Bucket, log logr.Logger) error {
 	ctx := context.Background()
 	bucket := r.storageClient.Bucket(gcsBucket.Spec.BucketName)
+
+	exist, err := r.bucketExists(gcsBucket.Spec.BucketName, log)
+	if err != nil {
+		log.Error(err, "failed to verify if bucket exists")
+		return err
+	}
+
+	if exist {
+		log.Info("bucket already exists")
+		return nil
+	}
 
 	// Create the bucket
 	if err := bucket.Create(ctx, os.Getenv("PROJECT_ID"), nil); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (r *BucketReconciler) grantBucketAccess(gcsBucket *storagev1alpha1.Bucket, log logr.Logger) error {
+	ctx := context.Background()
+
+	// Get the bucket handle
+	bucket := r.storageClient.Bucket(gcsBucket.Spec.BucketName)
+	iamHandle := bucket.IAM()
+
+	policy, err := iamHandle.Policy(ctx)
+	if err != nil {
+		log.Error(err, "failed to grant access")
+		return err
+	}
+
+	for i := range gcsBucket.Spec.ServiceAccounts {
+		policy.Add(gcsBucket.Spec.ServiceAccounts[i], "roles/storage.objectViewer")
+	}
+	err = iamHandle.SetPolicy(ctx, policy)
+	if err != nil {
+		log.Error(err, "failed to grant access")
+		return err
+	}
+
+	log.Info("granted access")
 	return nil
 }
 

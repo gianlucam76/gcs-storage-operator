@@ -50,6 +50,12 @@ spec:
                   be created. The location must be a regional or multi-regional location.
                   For a list of available locations, see: https://cloud.google.com/storage/docs/bucket-locations'
                 type: string
+              serviceAccounts:
+                description: ServiceAccounts are the email of the ServiceAccount which
+                  will be granted roles/storage.objectViewer for the bucket
+                items:
+                  type: string
+                type: array
             required:
             - bucketName
             type: object

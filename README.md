@@ -53,6 +53,9 @@ metadata:
 spec:
   bucketName: <BUCKET NAME>
   location: us-central1
+  serviceAccounts:
+    - serviceAccount:<SERVICE ACCOUNT EMAIL>
 ```
 
 This will create a bucket. Deleting above instance, will cause controller to delete bucket from google cloud storage.
+All service accounts listed will be granted roles/storage.objectViewer for the bucket.

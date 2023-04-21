@@ -1,0 +1,72 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.0
+  creationTimestamp: null
+  name: buckets.demo.projectsveltos.io
+spec:
+  group: demo.projectsveltos.io
+  names:
+    kind: Bucket
+    listKind: BucketList
+    plural: buckets
+    singular: bucket
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.bucketName
+      name: Bucket Name
+      type: string
+    - jsonPath: .status.bucketURL
+      name: Bucket URL
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Bucket is the Schema for the buckets API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: BucketSpec defines the desired state of Bucket
+            properties:
+              bucketName:
+                description: BucketName is the name of the bucket to be created.
+                type: string
+              location:
+                description: 'Location is the GCS location where the bucket should
+                  be created. The location must be a regional or multi-regional location.
+                  For a list of available locations, see: https://cloud.google.com/storage/docs/bucket-locations'
+                type: string
+            required:
+            - bucketName
+            type: object
+          status:
+            description: BucketStatus defines the observed state of Bucket
+            properties:
+              bucketURL:
+                description: BucketURL is the URL of the created bucket.
+                type: string
+              string:
+                description: Status represent bucket status
+                type: string
+            required:
+            - string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

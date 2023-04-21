@@ -3,7 +3,7 @@ Create Storage Bucket
 
 ## Generate service account key file
 
-Generate a Google Cloud service account key file (which is a JSON file containing the private key for a service account
+Generate a Google Cloud service account key file (which is a JSON file containing the private key for a service account). You can skip this if you already have one.
 
 1. Go to the Google Cloud Console and select the project you want to create the service account for.
 1. In the left navigation menu, click on "IAM & Admin" and then select "Service accounts".
@@ -20,6 +20,10 @@ Save the resulting JSON file to your local machine.
 Rename the file generate above to `service-account-key.json`
 
 and create a Secret in your management cluster
+
+```
+kubectl create ns sveltos-demo
+```
 
 ```
 kubectl create secret generic my-gcs-operator-secret --from-file=<path>/service-account-key.json -n sveltos-demo

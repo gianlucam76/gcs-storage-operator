@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-logr/logr"
@@ -93,13 +94,6 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	saCredentials, err := r.getServiceAccountCredentials(gcsBucket, log)
-	if err != nil {
-		log.Error(err, "failed to get service account credentials")
-		return ctrl.Result{}, err
-	}
-	gcsBucket.Status.ServiceAccountCredentials = saCredentials
-
 	// Check if the Bucket instance has the finalizer
 	if !controllerutil.ContainsFinalizer(gcsBucket, finalizerName) {
 		// If not, add it
@@ -108,6 +102,18 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			log.Error(err, "failed to update")
 			return ctrl.Result{}, err
 		}
+	}
+
+	saCredentials, err := r.getServiceAccountCredentials(gcsBucket, log)
+	if err != nil {
+		log.Error(err, "failed to get service account credentials")
+		return ctrl.Result{}, err
+	}
+
+	err = r.updateServiceAccountCredentials(ctx, gcsBucket, saCredentials, log)
+	if err != nil {
+		log.Error(err, "failed to update status with service account credentials")
+		return ctrl.Result{}, err
 	}
 
 	log.Info("creating bucket")
@@ -125,7 +131,11 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Set the status of the Bucket instance to "Created"
-	gcsBucket.Status = storagev1alpha1.BucketStatus{BucketURL: "https://storage.googleapis.com/" + gcsBucket.Spec.BucketName}
+	gcsBucket.Status = storagev1alpha1.BucketStatus{
+		BucketURL:                 "https://storage.googleapis.com/" + gcsBucket.Spec.BucketName,
+		ServiceAccountCredentials: saCredentials,
+		Status:                    "Created",
+	}
 	if err := r.Status().Update(ctx, gcsBucket); err != nil {
 		log.Error(err, "failed to update")
 		return ctrl.Result{}, err
@@ -208,6 +218,7 @@ func (r *BucketReconciler) grantBucketAccess(gcsBucket *storagev1alpha1.Bucket, 
 		return err
 	}
 
+	policy.Add(gcsBucket.Spec.ServiceAccount, "storage.objects.create")
 	policy.Add(gcsBucket.Spec.ServiceAccount, "roles/storage.objectAdmin")
 	err = iamHandle.SetPolicy(ctx, policy)
 	if err != nil {
@@ -228,14 +239,28 @@ func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *BucketReconciler) getServiceAccountCredentials(gcsBucket *storagev1alpha1.Bucket,
 	log logr.Logger) ([]byte, error) {
 
+	// if already set, use this.
+	if gcsBucket.Status.ServiceAccountCredentials != nil {
+		return gcsBucket.Status.ServiceAccountCredentials, nil
+	}
+
 	ctx := context.Background()
 	svc, err := iam.NewService(ctx, option.WithCredentialsFile("/var/secrets/google/service-account-key.json"))
 	if err != nil {
 		panic(err)
 	}
 
+	saInfo := strings.Split(gcsBucket.Spec.ServiceAccount, ":")
+	if len(saInfo) != 2 {
+		return nil,
+			fmt.Errorf("ServiceAccount %s is incorrect. An example of correct one is serviceAccount:<email>",
+				saInfo[1])
+	}
+
+	log.Info(fmt.Sprintf("getting credentials for %s", saInfo[1]))
+
 	req := svc.Projects.ServiceAccounts.Keys.Create(
-		fmt.Sprintf("projects/-/serviceAccounts/%s", gcsBucket.Spec.ServiceAccount),
+		fmt.Sprintf("projects/-/serviceAccounts/%s", saInfo[1]),
 		&iam.CreateServiceAccountKeyRequest{
 			KeyAlgorithm: "KEY_ALG_RSA_2048",
 		})
@@ -252,4 +277,16 @@ func (r *BucketReconciler) getServiceAccountCredentials(gcsBucket *storagev1alph
 	}
 
 	return keyBytes, nil
+}
+
+func (r *BucketReconciler) updateServiceAccountCredentials(ctx context.Context,
+	gcsBucket *storagev1alpha1.Bucket, credentials []byte, log logr.Logger) error {
+
+	if gcsBucket.Status.ServiceAccountCredentials != nil {
+		return nil
+	}
+
+	log.Info("updating status with service account credentials")
+	gcsBucket.Status.ServiceAccountCredentials = credentials
+	return r.Client.Status().Update(ctx, gcsBucket)
 }

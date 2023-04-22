@@ -39,13 +39,16 @@ type BucketSpec struct {
 // BucketStatus defines the observed state of Bucket
 type BucketStatus struct {
 	// BucketURL is the URL of the created bucket.
+	// +optional
 	BucketURL string `json:"bucketURL,omitempty"`
 
 	// ServiceAccountCredentials is the service account credentials
+	// +optional
 	ServiceAccountCredentials []byte `json:"serviceAccountCredentials,omitempty"`
 
 	// Status represent bucket status
-	Status string `json:"string"`
+	// +optional
+	Status string `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

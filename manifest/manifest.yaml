@@ -66,11 +66,9 @@ spec:
                 description: ServiceAccountCredentials is the service account credentials
                 format: byte
                 type: string
-              string:
+              status:
                 description: Status represent bucket status
                 type: string
-            required:
-            - string
             type: object
         type: object
     served: true

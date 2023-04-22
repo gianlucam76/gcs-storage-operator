@@ -5,27 +5,23 @@ Create Storage Bucket
 
 Generate a Google Cloud service account key file (which is a JSON file containing the private key for a service account). You can skip this if you already have one.
 
-1. Go to the Google Cloud Console and select the project you want to create the service account for.
-1. In the left navigation menu, click on "IAM & Admin" and then select "Service accounts".
-1. Click on "Create service account".
-1. Enter a name and description for your service account, and click on "Create".
-1. On the "Grant this service account access to project" page, select the roles you want to grant to the service account (e.g., "Editor", "Viewer", etc.) and click on "Continue".
-1. Skip the "Grant users access to this service account" page by clicking on "Done".
-1. On the "Service accounts" page, find the service account you just created and click on the three-dot menu on the right-hand side. Select "Create key".
-1. In the "Create private key" dialog, select "JSON" as the key type and click on "Create".
-Save the resulting JSON file to your local machine.
+1. authenticate with your Google Cloud account by running the following command in your terminal
+```
+gcloud auth login
+```
+2. Once you're authenticated, you can use the following command to create a new service account and generate a key for it
+```
+gcloud iam service-accounts keys create service-account-key.json --iam-account=[SA-EMAIL]
+```
+replace [SA-EMAIL] with the email address of the service account you want to create the key for.
 
 ## Make service account key file available via Secret
 
-Rename the file generate above to `service-account-key.json`
-
-and create a Secret in your management cluster
+Create a Secret in your management cluster, using the service-account-key.json created above.
 
 ```
 kubectl create ns sveltos-demo
-```
 
-```
 kubectl create secret generic my-gcs-operator-secret --from-file=<path>/service-account-key.json -n sveltos-demo
 ```
 
@@ -53,9 +49,8 @@ metadata:
 spec:
   bucketName: <BUCKET NAME>
   location: us-central1
-  serviceAccounts:
-    - serviceAccount:<SERVICE ACCOUNT EMAIL>
+  serviceAccount: serviceAccount:<SERVICE ACCOUNT EMAIL>
 ```
 
 This will create a bucket. Deleting above instance, will cause controller to delete bucket from google cloud storage.
-All service accounts listed will be granted roles/storage.objectViewer for the bucket.
+Service account listed will be granted roles/storage.objectViewer for the bucket.

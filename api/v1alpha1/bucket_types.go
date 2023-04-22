@@ -31,15 +31,18 @@ type BucketSpec struct {
 	// https://cloud.google.com/storage/docs/bucket-locations
 	Location string `json:"location,omitempty"`
 
-	// ServiceAccounts are the email of the ServiceAccount which will
+	// ServiceAccount is the email of the ServiceAccount which will
 	// be granted roles/storage.objectViewer for the bucket
-	ServiceAccounts []string `json:"serviceAccounts,omitempty"`
+	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // BucketStatus defines the observed state of Bucket
 type BucketStatus struct {
 	// BucketURL is the URL of the created bucket.
 	BucketURL string `json:"bucketURL,omitempty"`
+
+	// ServiceAccountCredentials is the service account credentials
+	ServiceAccountCredentials []byte `json:"serviceAccountCredentials,omitempty"`
 
 	// Status represent bucket status
 	Status string `json:"string"`

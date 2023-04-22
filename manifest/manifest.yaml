@@ -50,11 +50,9 @@ spec:
               location:
                 description: 'Location is the GCS location where the bucket should be created. The location must be a regional or multi-regional location. For a list of available locations, see: https://cloud.google.com/storage/docs/bucket-locations'
                 type: string
-              serviceAccounts:
-                description: ServiceAccounts are the email of the ServiceAccount which will be granted roles/storage.objectViewer for the bucket
-                items:
-                  type: string
-                type: array
+              serviceAccount:
+                description: ServiceAccount is the email of the ServiceAccount which will be granted roles/storage.objectViewer for the bucket
+                type: string
             required:
             - bucketName
             type: object
@@ -63,6 +61,10 @@ spec:
             properties:
               bucketURL:
                 description: BucketURL is the URL of the created bucket.
+                type: string
+              serviceAccountCredentials:
+                description: ServiceAccountCredentials is the service account credentials
+                format: byte
                 type: string
               string:
                 description: Status represent bucket status

@@ -18,10 +18,13 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-logr/logr"
+	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -89,6 +92,13 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 		return ctrl.Result{}, nil
 	}
+
+	saCredentials, err := r.getServiceAccountCredentials(gcsBucket, log)
+	if err != nil {
+		log.Error(err, "failed to get service account credentials")
+		return ctrl.Result{}, err
+	}
+	gcsBucket.Status.ServiceAccountCredentials = saCredentials
 
 	// Check if the Bucket instance has the finalizer
 	if !controllerutil.ContainsFinalizer(gcsBucket, finalizerName) {
@@ -198,9 +208,7 @@ func (r *BucketReconciler) grantBucketAccess(gcsBucket *storagev1alpha1.Bucket, 
 		return err
 	}
 
-	for i := range gcsBucket.Spec.ServiceAccounts {
-		policy.Add(gcsBucket.Spec.ServiceAccounts[i], "roles/storage.objectViewer")
-	}
+	policy.Add(gcsBucket.Spec.ServiceAccount, "roles/storage.objectAdmin")
 	err = iamHandle.SetPolicy(ctx, policy)
 	if err != nil {
 		log.Error(err, "failed to grant access")
@@ -215,4 +223,33 @@ func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&storagev1alpha1.Bucket{}).
 		Complete(r)
+}
+
+func (r *BucketReconciler) getServiceAccountCredentials(gcsBucket *storagev1alpha1.Bucket,
+	log logr.Logger) ([]byte, error) {
+
+	ctx := context.Background()
+	svc, err := iam.NewService(ctx, option.WithCredentialsFile("/var/secrets/google/service-account-key.json"))
+	if err != nil {
+		panic(err)
+	}
+
+	req := svc.Projects.ServiceAccounts.Keys.Create(
+		fmt.Sprintf("projects/-/serviceAccounts/%s", gcsBucket.Spec.ServiceAccount),
+		&iam.CreateServiceAccountKeyRequest{
+			KeyAlgorithm: "KEY_ALG_RSA_2048",
+		})
+	key, err := req.Do()
+	if err != nil {
+		log.Error(err, "failed to create service account key with credentials")
+		return nil, err
+	}
+
+	keyBytes, err := json.Marshal(key)
+	if err != nil {
+		log.Error(err, "failed to marshal key")
+		return nil, err
+	}
+
+	return keyBytes, nil
 }

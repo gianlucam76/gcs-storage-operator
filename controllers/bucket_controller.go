@@ -218,8 +218,9 @@ func (r *BucketReconciler) grantBucketAccess(gcsBucket *storagev1alpha1.Bucket, 
 		return err
 	}
 
-	policy.Add(gcsBucket.Spec.ServiceAccount, "storage.objects.create")
+	policy.Add(gcsBucket.Spec.ServiceAccount, "roles/storage.objectViewer")
 	policy.Add(gcsBucket.Spec.ServiceAccount, "roles/storage.objectAdmin")
+	policy.Add(gcsBucket.Spec.ServiceAccount, "roles/storage.objectCreator")
 	err = iamHandle.SetPolicy(ctx, policy)
 	if err != nil {
 		log.Error(err, "failed to grant access")

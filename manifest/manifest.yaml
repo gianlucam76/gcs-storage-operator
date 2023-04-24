@@ -64,7 +64,6 @@ spec:
                 type: string
               serviceAccountCredentials:
                 description: ServiceAccountCredentials is the service account credentials
-                format: byte
                 type: string
               status:
                 description: Status represent bucket status

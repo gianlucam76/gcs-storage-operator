@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -26,7 +25,9 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-logr/logr"
 	"google.golang.org/api/iam/v1"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -65,6 +66,9 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	gcsBucket := &storagev1alpha1.Bucket{}
 	err := r.Get(ctx, req.NamespacedName, gcsBucket)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
 		// Error reading the object - requeue the request.
 		return ctrl.Result{}, err
 	}
@@ -81,7 +85,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Check if the Bucket instance is being deleted
 	if !gcsBucket.ObjectMeta.DeletionTimestamp.IsZero() {
 		// If the bucket is being deleted, delete it from Google Cloud Storage
-		if err := r.deleteBucket(gcsBucket); err != nil {
+		if err := r.deleteBucket(gcsBucket, log); err != nil {
 			log.Error(err, "failed to delete")
 			return ctrl.Result{}, err
 		}
@@ -144,8 +148,47 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{}, nil
 }
 
-func (r *BucketReconciler) deleteBucket(gcsBucket *storagev1alpha1.Bucket) error {
+func (r *BucketReconciler) deleteAllObjects(ctx context.Context, bucketName string, log logr.Logger) error {
+	bucket := r.storageClient.Bucket(bucketName)
+
+	// Get an iterator for all the objects in the bucket
+	objects := bucket.Objects(ctx, nil)
+
+	// Iterate over all the objects in the bucket
+	for {
+		object, err := objects.Next()
+		if err == iterator.Done {
+			// All objects have been deleted
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		// Delete the object
+		log.Info(fmt.Sprintf("deleting object %s", object.Name))
+		if err := bucket.Object(object.Name).Delete(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *BucketReconciler) deleteBucket(gcsBucket *storagev1alpha1.Bucket, log logr.Logger) error {
 	ctx := context.Background()
+
+	exist, err := r.bucketExists(gcsBucket.Spec.BucketName, log)
+	if err != nil {
+		log.Error(err, "failed to verify if bucket exists")
+		return err
+	}
+
+	if !exist {
+		log.Info("bucket does not exist")
+		return nil
+	}
+
 	bucket := r.storageClient.Bucket(gcsBucket.Spec.BucketName)
 
 	// Check if the bucket exists before deleting
@@ -157,10 +200,19 @@ func (r *BucketReconciler) deleteBucket(gcsBucket *storagev1alpha1.Bucket) error
 		return err
 	}
 
+	// Delete all objects
+	log.Info("deleting objects in bucket")
+	if err := r.deleteAllObjects(ctx, gcsBucket.Spec.BucketName, log); err != nil {
+		return err
+	}
+
 	// Delete the bucket
+	log.Info("deleting bucket")
 	if err := bucket.Delete(ctx); err != nil {
 		return err
 	}
+
+	log.Info("deleted bucket")
 	return nil
 }
 
@@ -238,10 +290,10 @@ func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *BucketReconciler) getServiceAccountCredentials(gcsBucket *storagev1alpha1.Bucket,
-	log logr.Logger) ([]byte, error) {
+	log logr.Logger) (string, error) {
 
 	// if already set, use this.
-	if gcsBucket.Status.ServiceAccountCredentials != nil {
+	if gcsBucket.Status.ServiceAccountCredentials != "" {
 		return gcsBucket.Status.ServiceAccountCredentials, nil
 	}
 
@@ -253,7 +305,7 @@ func (r *BucketReconciler) getServiceAccountCredentials(gcsBucket *storagev1alph
 
 	saInfo := strings.Split(gcsBucket.Spec.ServiceAccount, ":")
 	if len(saInfo) != 2 {
-		return nil,
+		return "",
 			fmt.Errorf("ServiceAccount %s is incorrect. An example of correct one is serviceAccount:<email>",
 				saInfo[1])
 	}
@@ -268,22 +320,16 @@ func (r *BucketReconciler) getServiceAccountCredentials(gcsBucket *storagev1alph
 	key, err := req.Do()
 	if err != nil {
 		log.Error(err, "failed to create service account key with credentials")
-		return nil, err
+		return "", err
 	}
 
-	keyBytes, err := json.Marshal(key)
-	if err != nil {
-		log.Error(err, "failed to marshal key")
-		return nil, err
-	}
-
-	return keyBytes, nil
+	return key.PrivateKeyData, nil
 }
 
 func (r *BucketReconciler) updateServiceAccountCredentials(ctx context.Context,
-	gcsBucket *storagev1alpha1.Bucket, credentials []byte, log logr.Logger) error {
+	gcsBucket *storagev1alpha1.Bucket, credentials string, log logr.Logger) error {
 
-	if gcsBucket.Status.ServiceAccountCredentials != nil {
+	if gcsBucket.Status.ServiceAccountCredentials != "" {
 		return nil
 	}
 

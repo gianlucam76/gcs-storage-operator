@@ -44,7 +44,7 @@ type BucketStatus struct {
 
 	// ServiceAccountCredentials is the service account credentials
 	// +optional
-	ServiceAccountCredentials []byte `json:"serviceAccountCredentials,omitempty"`
+	ServiceAccountCredentials string `json:"serviceAccountCredentials,omitempty"`
 
 	// Status represent bucket status
 	// +optional

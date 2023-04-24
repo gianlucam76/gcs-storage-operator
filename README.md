@@ -22,7 +22,7 @@ Create a Secret in your management cluster, using the service-account-key.json c
 ```
 kubectl create ns sveltos-demo
 
-kubectl create secret generic my-gcs-operator-secret --from-file=<path>/service-account-key.json -n sveltos-demo
+kubectl create secret generic my-gcs-operator-secret --from-file=service-account-key.json -n sveltos-demo
 ```
 
 ## Create a Secret containing the Google ProjectID
